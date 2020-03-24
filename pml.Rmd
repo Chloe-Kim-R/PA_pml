@@ -1,0 +1,86 @@
+---
+title: "Predict on the Weight Lifting Exercise"
+author: "Chloe Kim"
+date: '2020 3 24 '
+output: html_document
+---
+## Summary
+Purpose of this study is constructing prediction model to classify 5 different ways of dumbell lifting and 20 cases in the test data set would be tested by the prediction model. For this classification modeling, randomForest was applied and data from accelerometers,gyroscope and magnetometer on the belt,forearm, arm  and dumbell were selected as feature.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### Data
+Download training data from link and explore data set with additional information from the website. (http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har)
+Classification outcome is "classe" variable with 5 levels, A to E. 
+
+```{r}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile ="pml-training.csv")
+training <- read.csv("pml-training.csv",na.strings = "na")
+summary(training$classe)
+```
+
+## Feature selection
+Data of accelerometer, gyroscope and magnetometer readings were selected for modeling. 
+According to the published WLE dataset paper (Velloso et al. ACM SIGCHI,2013) roll, pitch, yaw of belt were seletced additionally as feature.  
+Total 35 features (11 in belt, 8 in arm, dumbbell and forearm repectively) were selected for RandomForest training. 
+
+```{r}
+suppressMessages(library(caret))
+suppressMessages(library(randomForest))
+suppressMessages(library(dplyr))
+## Feature select and correct variable type
+  features <- grep("accel_|gyros_|magent_",names(training)) 
+  dt <- training[,c(8:10,features,160)]
+  nms <- c("var_total_accel_belt","var_accel_arm","var_accel_dumbbell","var_accel_forearm")
+  dt[nms] <- lapply(dt[nms],as.numeric)
+## Subset into train and test set, 0.6 to 0.4 ratio  
+  set.seed(338) 
+  trainid <- createDataPartition(dt$classe, p=0.6, list=F) 
+  train <- dt[trainid,] ## 11776 obs. of 36 variables
+  test <- dt[-trainid,] ## 7846 obs. of 36 variables
+## RandomForest modeling 
+  set.seed(1101)
+  rf <- randomForest(classe~., data=train)
+## Extract the variable importance and oder
+  varImp <- data.frame(var=row.names(varImp(rf)), overall=varImp(rf)) %>% arrange(desc(Overall))
+  tail(varImp,10)
+```
+
+Variances of accelerometer(var_total_accel_belt,var_accel_arm,var_accel_dumbbell,var_accel_forearm) could be excluded according to the Importance measure but they were retained at this time.
+
+### Performance : Prediction and Accuracy
+In rf model, Out of bag error was estimate 1.09% and addtional cross validtion was not performed due to intrinsic basis of randorm forest analysis. 
+```{r}
+## OBB error rate and confusion matrix of model
+print(rf)
+ 
+```
+ 
+  From the confusionMatrix of internal test set with rf model, overall accuracy is observed 98.9%.
+```{r}
+## Test model accuraty with internal test set 
+  rfprd <- predict(rf,test[-36])
+  cM <- confusionMatrix(test$classe,rfprd)
+  cM$overall
+  cM$table
+  
+```
+
+
+### Quiz : apply prediction model to 20 test cases in the test data. 
+Using this rf model, classes of 20 cases in the test data set were prediected. 
+
+```{r}
+## Load the test data set and subset data frame with selected features  
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile ="pml-testing.csv")
+  finaltest <- read.csv("pml-testing.csv",na.strings = "na")
+  features <- grep("accel_|gyros_|magent_",names(finaltest)) 
+  data <- finaltest[,c(8:10,features,160)]
+  nms <- c("var_total_accel_belt","var_accel_arm","var_accel_dumbbell","var_accel_forearm")
+  data[nms] <- lapply(data[nms],as.numeric)
+  
+## Prediction of 20 casese with RandomFores model rf.
+  rfprdfinal <- predict(rf,data[-36]) 
+  print(rfprdfinal)
+```
